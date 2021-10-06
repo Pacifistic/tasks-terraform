@@ -131,19 +131,12 @@ resource "aws_db_instance" "tasksdb" {
 # end of database #
 
 # webapp #
-resource "aws_security_group" "public" {
-  name = "public_security_group"
+resource "aws_security_group" "private" {
+  name = "task-webapp-sg"
   vpc_id = module.vpc.vpc_id
   ingress {
     from_port = 8080
     to_port = 8080
-    protocol = "tcp"
-    cidr_blocks = [ "0.0.0.0/0" ]
-  }
-
-  ingress {
-    from_port = 22
-    to_port = 22
     protocol = "tcp"
     cidr_blocks = [ "0.0.0.0/0" ]
   }
@@ -161,33 +154,44 @@ resource "aws_instance" "webapp_instance" {
   instance_type = "t2.micro"
   iam_instance_profile = "EC2-S3-Read-Access"
 
-  subnet_id = module.vpc.public_subnets[0]
-  vpc_security_group_ids = [ aws_security_group.public.id ]
+  subnet_id = module.vpc.private_subnets[0]
+  vpc_security_group_ids = [ aws_security_group.private.id ]
   key_name = "dom"
 
-  connection {
-    type = "ssh"
-    agent = "false"
-    host = self.public_ip
-    user = "ec2-user"
-    private_key = file("dom.pem")
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "sudo yum install java -y > /dev/null",
-      "export DB_IP=${aws_db_instance.tasksdb.address}",
-      "export DB_PORT=${aws_db_instance.tasksdb.port}",
-      "export DB_USERNAME=${aws_db_instance.tasksdb.username}",
-      "export DB_PASSWORD=${var.db_password}",
-      "aws s3 cp s3://task-web-dev-bucket/tasks-webapp.jar ./ > /dev/null",
-      "nohup java -jar tasks-webapp.jar &",
-      "sleep 1"
-    ]
-  }
+  user_data = <<-EOF
+  #! /bin/bash
+  sudo yum update -y
+  sudo yum install java -y
+  export DB_IP=${aws_db_instance.tasksdb.address}
+  export DB_PORT=${aws_db_instance.tasksdb.port}
+  export DB_USERNAME=${aws_db_instance.tasksdb.username}
+  export DB_PASSWORD=${var.db_password}
+  aws s3 cp s3://task-web-dev-bucket/tasks-webapp.jar ./
+  nohup java -jar tasks-webapp.jar &
+  EOF
 
   tags = {
     Name = "webapp-instance"
     Terraform = "true"
+  }
+}
+# end of webapp #
+
+# static website #
+resource "aws_security_group" "public" {
+  name = "task-web-sg"
+  vpc_id = module.vpc.vpc_id
+  ingress {
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = [ "0.0.0.0/0" ]
+  }
+
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = [ "0.0.0.0/0" ]
   }
 }
