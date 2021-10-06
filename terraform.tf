@@ -195,3 +195,40 @@ resource "aws_security_group" "public" {
     cidr_blocks = [ "0.0.0.0/0" ]
   }
 }
+
+resource "aws_amplify_app" "tasks" {
+  name = "tasks"
+  repository = "https://github.com/dsipelis/tasks-web.git"
+  access_token = var.github_token
+
+  # The default build_spec added by the Amplify Console for React.
+  build_spec = <<-EOT
+    version: 1
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: build
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  EOT
+
+  # The default rewrites and redirects added by the Amplify Console.
+  custom_rule {
+    source = "/<*>"
+    status = "404"
+    target = "/index.html"
+  }
+
+  environment_variables = {
+    REACT_APP_API = aws_instance.webapp_instance.private_dns
+  }
+}

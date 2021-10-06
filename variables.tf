@@ -12,3 +12,7 @@ variable "db_password" {
     error_message = "Database password must be at least 8 characters."
   }
 }
+
+variable "github_token" {
+  type = string
+}
